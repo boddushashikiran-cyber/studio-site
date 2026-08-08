@@ -7,20 +7,20 @@ const testimonials = [
   {
     quote:
       "Kiran Studios rebuilt our product site in three weeks and it finally feels like the product itself.",
-    name: "R. Okafor",
-    role: "Founder, Meridian Analytics",
+    name: "Nathi Krithin",
+    role: "Founder, Codeduelz",
   },
   {
     quote:
-      "The booking flow they built cut our sales-call scheduling time in half.",
-    name: "S. Park",
-    role: "Head of Growth, Fieldnote",
+      "Clear communication from kickoff to launch",
+    name: "Spoorthy",
+    role: "Student, Texas Womens University",
   },
   {
     quote:
       "Fast, opinionated, and they pushed back when we asked for the wrong thing.",
-    name: "J. Alvarez",
-    role: "CMO, Lumen",
+    name: "Narayana Chandra Bose",
+    role: "Student, Bits Pilani",
   },
 ];
 
