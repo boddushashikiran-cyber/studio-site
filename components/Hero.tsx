@@ -251,84 +251,65 @@ function AmbientOrbs() {
 }
 
 /* ---------------------------------------------------------
-   Metallic balls: real chrome spheres living in the same 3D
-   scene as the wordmark, positioned slightly further from the
-   camera so the letters naturally occlude them as they pass
-   behind. Each bounces independently off the edges of the
-   visible viewport at its depth — the same square the frame
-   shows — and squashes/stretches on each wall hit before
-   settling back into a sphere, like a real ball absorbing
-   an impact.
+   Metallic balls: three identical chrome spheres living in the
+   same 3D scene as the wordmark, each positioned at a different
+   depth so the letters (and each other) naturally occlude them.
+   Position is driven by a shared triangle wave in time — not
+   integrated per-frame — so every ball reaches a wall extreme
+   at the exact same instant as the others. Different directions
+   come from mirroring that shared wave per axis, not from
+   different speeds, which is what keeps the wall hits in sync.
 --------------------------------------------------------- */
+const BALL_RADIUS = 0.15;
+const WAVE_PERIOD_X = 3.4; // seconds for one full left-right cycle
+const WAVE_PERIOD_Y = 2.6; // seconds for one full up-down cycle
+
+// -1..1 triangle wave: linear ramp between extremes, shared by every
+// ball so their extremes (wall contacts) always land on the same tick.
+function triWave(t: number, period: number) {
+  const phase = (t % period) / period;
+  return phase < 0.5 ? -1 + 4 * phase : 3 - 4 * phase;
+}
+
 type BallConfig = {
-  startX: number;
-  startY: number;
-  velX: number;
-  velY: number;
-  radius: number;
+  signX: 1 | -1;
+  signY: 1 | -1;
   z: number;
 };
 
 const BALLS: BallConfig[] = [
-  { startX: -0.9, startY: 0.6, velX: 1.35, velY: 0.95, radius: 0.26, z: -1.05 },
-  { startX: 0.7, startY: -0.5, velX: -1.05, velY: 1.4, radius: 0.19, z: -1.35 },
-  { startX: 0.1, startY: 0.9, velX: 0.85, velY: -1.2, radius: 0.15, z: -0.75 },
+  { signX: 1, signY: 1, z: -1.05 },
+  { signX: -1, signY: 1, z: -1.35 },
+  { signX: 1, signY: -1, z: -0.75 },
 ];
 
 function MetallicBall({ config }: { config: BallConfig }) {
   const meshRef = useRef<THREE.Mesh>(null!);
-  const posRef = useRef({ x: config.startX, y: config.startY });
-  const velRef = useRef({ x: config.velX, y: config.velY });
-  const hitTimeRef = useRef(-10);
-  const axisRef = useRef<"x" | "y">("x");
-
-  const { z: ballZ, radius } = config;
+  const { signX, signY, z: ballZ } = config;
 
   useFrame((state, delta) => {
-    const viewport = state.viewport.getCurrentViewport(state.camera, [0, 0, ballZ]);
-    const halfW = viewport.width / 2 - radius;
-    const halfH = viewport.height / 2 - radius;
-
-    let { x, y } = posRef.current;
-    x += velRef.current.x * delta;
-    y += velRef.current.y * delta;
-
     const t = state.clock.elapsedTime;
+    const viewport = state.viewport.getCurrentViewport(state.camera, [0, 0, ballZ]);
+    const halfW = viewport.width / 2 - BALL_RADIUS;
+    const halfH = viewport.height / 2 - BALL_RADIUS;
 
-    if (x <= -halfW) {
-      x = -halfW;
-      velRef.current.x = Math.abs(velRef.current.x);
-      hitTimeRef.current = t;
-      axisRef.current = "x";
-    } else if (x >= halfW) {
-      x = halfW;
-      velRef.current.x = -Math.abs(velRef.current.x);
-      hitTimeRef.current = t;
-      axisRef.current = "x";
-    }
-
-    if (y <= -halfH) {
-      y = -halfH;
-      velRef.current.y = Math.abs(velRef.current.y);
-      hitTimeRef.current = t;
-      axisRef.current = "y";
-    } else if (y >= halfH) {
-      y = halfH;
-      velRef.current.y = -Math.abs(velRef.current.y);
-      hitTimeRef.current = t;
-      axisRef.current = "y";
-    }
-
-    posRef.current = { x, y };
+    const x = signX * halfW * triWave(t, WAVE_PERIOD_X);
+    const y = signY * halfH * triWave(t, WAVE_PERIOD_Y);
 
     if (meshRef.current) {
       meshRef.current.position.set(x, y, ballZ);
 
-      // squash & stretch jiggle that decays after each wall hit
-      const elapsed = t - hitTimeRef.current;
+      // time since the most recent wall contact on each axis — since
+      // every ball shares the same periods, this (and the jiggle it
+      // drives) lines up across all three balls automatically
+      const sinceX = t % (WAVE_PERIOD_X / 2);
+      const sinceY = t % (WAVE_PERIOD_Y / 2);
+      const onXWall = sinceX <= sinceY;
+      const elapsed = onXWall ? sinceX : sinceY;
+
       const decay = Math.exp(-6 * elapsed);
       const osc = Math.sin(elapsed * 34) * decay * 0.3;
-      if (axisRef.current === "x") {
+      if (onXWall) {
         meshRef.current.scale.set(1 - osc, 1 + osc, 1 + osc);
       } else {
         meshRef.current.scale.set(1 + osc, 1 - osc, 1 + osc);
@@ -341,13 +322,8 @@ function MetallicBall({ config }: { config: BallConfig }) {
   });
 
   return (
-    <mesh
-      ref={meshRef}
-      position={[config.startX, config.startY, ballZ]}
-      castShadow
-      receiveShadow
-    >
-      <sphereGeometry args={[radius, 64, 64]} />
+    <mesh ref={meshRef} position={[0, 0, ballZ]} castShadow receiveShadow>
+      <sphereGeometry args={[BALL_RADIUS, 64, 64]} />
       <meshPhysicalMaterial
         color="#cfd0d6"
         metalness={1}
