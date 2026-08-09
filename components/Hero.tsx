@@ -7,11 +7,10 @@ import { Center, Text3D, Float, Environment, ContactShadows } from "@react-three
 import {
   motion,
   useMotionValue,
+  useMotionTemplate,
   useSpring,
   useTransform,
-  useScroll,
   useReducedMotion,
-  type MotionValue,
 } from "framer-motion";
 import * as THREE from "three";
 
@@ -253,120 +252,71 @@ function AmbientOrbs() {
 }
 
 /* ---------------------------------------------------------
-   Orb burst: a single glowing blob sitting directly behind the
-   wordmark. At rest its fragments sit tucked together, reading
-   as one soft orb. Tied to scroll progress through the hero —
-   scroll down and it blasts its fragments outward and fades;
-   scroll back up (or just look at it again) and the same
-   scroll-bound values pull every fragment back into the blob.
+   Metallic ball: bounces continuously inside the hero's
+   square viewport box. Off-center start position and a
+   non-round velocity ratio keep it from settling into a
+   simple back-and-forth — it drifts along each wall over
+   time, and each reflection sends it on to the next side.
 --------------------------------------------------------- */
-type ShardConfig = {
-  angle: number;
-  radius: number;
-  size: number;
-  color: string;
-  rotate: number;
-};
-
-// deterministic (not Math.random) so server/client markup always match
-const SHARDS: ShardConfig[] = Array.from({ length: 16 }, (_, i) => {
-  const angle = (360 / 16) * i;
-  const radius = 90 + ((i * 37) % 60);
-  const size = 10 + ((i * 13) % 22);
-  const rotate = ((i * 53) % 180) - 90;
-  const color = i % 2 === 0 ? "#E8A33D" : "#7C6FFF";
-  return { angle, radius, size, color, rotate };
-});
-
-function Shard({
-  config,
-  progress,
-  reduceMotion,
-}: {
-  config: ShardConfig;
-  progress: MotionValue<number>;
-  reduceMotion: boolean;
-}) {
-  const rad = (config.angle * Math.PI) / 180;
-  const travelX = Math.cos(rad) * config.radius;
-  const travelY = Math.sin(rad) * config.radius;
-
-  const x = useTransform(progress, [0, 1], [0, travelX]);
-  const y = useTransform(progress, [0, 1], [0, travelY]);
-  const opacity = useTransform(progress, [0, 0.12, 0.75, 1], [0.85, 0.9, 0.35, 0]);
-  const scale = useTransform(progress, [0, 1], [1, 0.25]);
-  const rotate = useTransform(progress, [0, 1], [0, config.rotate]);
-
-  return (
-    <motion.span
-      className="absolute left-1/2 top-1/2 rounded-full blur-[3px]"
-      style={{
-        width: config.size,
-        height: config.size,
-        marginLeft: -config.size / 2,
-        marginTop: -config.size / 2,
-        backgroundColor: config.color,
-        x: reduceMotion ? 0 : x,
-        y: reduceMotion ? 0 : y,
-        opacity: reduceMotion ? 0.7 : opacity,
-        scale: reduceMotion ? 1 : scale,
-        rotate: reduceMotion ? 0 : rotate,
-      }}
-    />
-  );
-}
-
-function OrbBurst({ progress }: { progress: MotionValue<number> }) {
+function MetallicBouncingBall() {
   const prefersReducedMotion = useReducedMotion();
   const reduceMotion = Boolean(prefersReducedMotion);
 
-  const coreOpacity = useTransform(progress, [0, 0.35, 0.7], [0.85, 0.4, 0]);
-  const coreScale = useTransform(progress, [0, 0.5], [1, 1.7]);
-  const flashOpacity = useTransform(progress, [0, 0.06, 0.22], [0, 0.5, 0]);
-  const flashScale = useTransform(progress, [0, 0.22], [0.7, 1.9]);
+  const posX = useMotionValue(20); // percent of container
+  const posY = useMotionValue(28);
+  const left = useMotionTemplate`${posX}%`;
+  const top = useMotionTemplate`${posY}%`;
+
+  useEffect(() => {
+    if (reduceMotion) return;
+
+    let vx = 0.5; // percent per frame
+    let vy = 0.36;
+    const radiusPct = 4.5; // keeps the ball's edge from clipping the box
+    let frame: number;
+
+    const tick = () => {
+      let x = posX.get() + vx;
+      let y = posY.get() + vy;
+
+      if (x <= radiusPct) {
+        x = radiusPct;
+        vx = Math.abs(vx);
+      } else if (x >= 100 - radiusPct) {
+        x = 100 - radiusPct;
+        vx = -Math.abs(vx);
+      }
+
+      if (y <= radiusPct) {
+        y = radiusPct;
+        vy = Math.abs(vy);
+      } else if (y >= 100 - radiusPct) {
+        y = 100 - radiusPct;
+        vy = -Math.abs(vy);
+      }
+
+      posX.set(x);
+      posY.set(y);
+      frame = requestAnimationFrame(tick);
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [reduceMotion, posX, posY]);
 
   return (
-    <div
-      className="pointer-events-none absolute left-1/2 top-1/2 h-0 w-0"
+    <motion.div
       aria-hidden
-    >
-      {/* ambient pulse of the intact orb */}
-      <motion.div
-        className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full blur-[60px]"
-        style={{
-          width: 260,
-          height: 260,
-          background:
-            "radial-gradient(circle, #E8A33D55 0%, #7C6FFF33 55%, transparent 75%)",
-          opacity: reduceMotion ? 0.6 : coreOpacity,
-          scale: reduceMotion ? 1 : coreScale,
-        }}
-        animate={
-          reduceMotion
-            ? undefined
-            : { opacity: [0.6, 0.85, 0.6], scale: [1, 1.08, 1] }
-        }
-        transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-      />
-
-      {/* the blast flash, quick and bright, right as scroll begins */}
-      {!reduceMotion && (
-        <motion.div
-          className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full blur-[40px]"
-          style={{
-            width: 220,
-            height: 220,
-            background: "radial-gradient(circle, #ffffff88 0%, transparent 70%)",
-            opacity: flashOpacity,
-            scale: flashScale,
-          }}
-        />
-      )}
-
-      {SHARDS.map((s, i) => (
-        <Shard key={i} config={s} progress={progress} reduceMotion={reduceMotion} />
-      ))}
-    </div>
+      className="pointer-events-none absolute z-[5] h-[30px] w-[30px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+      style={{
+        left: reduceMotion ? "50%" : left,
+        top: reduceMotion ? "50%" : top,
+        background:
+          "radial-gradient(circle at 32% 26%, #ffffff 0%, #e4e4ea 16%, #a7a7b0 42%, #5c5c64 70%, #17171a 100%)",
+        boxShadow:
+          "0 0 14px rgba(255,255,255,0.3), inset -5px -5px 9px rgba(0,0,0,0.55), inset 3px 3px 6px rgba(255,255,255,0.55)",
+      }}
+    />
   );
 }
 
@@ -380,7 +330,7 @@ function ViewportFrame({ children }: { children: ReactNode }) {
 
   return (
     <div
-      className="relative aspect-square w-full max-w-[520px] border border-line"
+      className="relative aspect-square w-full max-w-[520px] overflow-hidden border border-line"
       onPointerMove={(e) => {
         const rect = e.currentTarget.getBoundingClientRect();
         const x = (((e.clientX - rect.left) / rect.width) * 2 - 1).toFixed(2);
@@ -449,17 +399,8 @@ function KineticHeadline() {
 }
 
 export default function Hero() {
-  const heroRef = useRef<HTMLElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: heroRef,
-    offset: ["start start", "end start"],
-  });
-
   return (
-    <section
-      ref={heroRef}
-      className="relative mx-auto flex min-h-screen max-w-[1400px] flex-col justify-center gap-12 overflow-hidden px-6 pt-24 lg:flex-row lg:items-center lg:gap-8 lg:px-12"
-    >
+    <section className="relative mx-auto flex min-h-screen max-w-[1400px] flex-col justify-center gap-12 overflow-hidden px-6 pt-24 lg:flex-row lg:items-center lg:gap-8 lg:px-12">
       <AmbientOrbs />
 
       <div className="relative lg:w-[58%]">
@@ -502,7 +443,6 @@ export default function Hero() {
       </div>
 
       <div className="relative flex items-center justify-center lg:w-[42%]">
-        <OrbBurst progress={scrollYProgress} />
         <ViewportFrame>
           <Canvas
             camera={{ position: [0, 0, 6], fov: 40 }}
@@ -515,6 +455,7 @@ export default function Hero() {
               <Logo3D />
             </Suspense>
           </Canvas>
+          <MetallicBouncingBall />
         </ViewportFrame>
       </div>
     </section>
