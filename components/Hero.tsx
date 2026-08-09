@@ -1,16 +1,23 @@
 "use client";
 
-import { useRef, useState, useMemo, Suspense } from "react";
+import { useRef, useState, useMemo, useEffect, Suspense } from "react";
+import type { ReactNode } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Center, Text3D, Float } from "@react-three/drei";
-import { motion } from "framer-motion";
+import { Center, Text3D, Float, Environment, ContactShadows } from "@react-three/drei";
+import {
+  motion,
+  useMotionValue,
+  useSpring,
+  useTransform,
+  useReducedMotion,
+} from "framer-motion";
 import * as THREE from "three";
 
 /* ---------------------------------------------------------
    The 3D object: an extruded "KIRAN STUDIOS" wordmark that
    eases its rotation toward the cursor position, wrapped in
-   a slow ambient float. Lives inside the bracketed "viewport"
-   frame — the hero's signature element.
+   a slow ambient float. Physical material + environment
+   lighting give it real reflections instead of flat shading.
 --------------------------------------------------------- */
 function Logo3D() {
   const groupRef = useRef<THREE.Group>(null);
@@ -35,20 +42,25 @@ function Logo3D() {
           <Text3D
             font="/fonts/helvetiker_bold.typeface.json"
             size={0.62}
-            height={0.18}
-            curveSegments={12}
+            height={0.2}
+            curveSegments={24}
             bevelEnabled
-            bevelThickness={0.02}
-            bevelSize={0.015}
-            bevelSegments={4}
+            bevelThickness={0.025}
+            bevelSize={0.018}
+            bevelSegments={8}
+            castShadow
           >
             KIRAN
-            <meshStandardMaterial
+            <meshPhysicalMaterial
               color="#E8A33D"
               emissive="#E8A33D"
-              emissiveIntensity={0.2}
-              roughness={0.3}
-              metalness={0.5}
+              emissiveIntensity={0.08}
+              roughness={0.22}
+              metalness={0.85}
+              clearcoat={1}
+              clearcoatRoughness={0.1}
+              reflectivity={1}
+              envMapIntensity={1.4}
             />
           </Text3D>
         </Center>
@@ -57,25 +69,40 @@ function Logo3D() {
           <Text3D
             font="/fonts/helvetiker_bold.typeface.json"
             size={0.32}
-            height={0.12}
-            curveSegments={12}
+            height={0.14}
+            curveSegments={24}
             bevelEnabled
-            bevelThickness={0.015}
-            bevelSize={0.01}
-            bevelSegments={4}
+            bevelThickness={0.018}
+            bevelSize={0.012}
+            bevelSegments={8}
             letterSpacing={0.04}
+            castShadow
           >
             STUDIOS
-            <meshStandardMaterial
+            <meshPhysicalMaterial
               color="#7C6FFF"
               emissive="#7C6FFF"
-              emissiveIntensity={0.15}
-              roughness={0.35}
-              metalness={0.5}
+              emissiveIntensity={0.06}
+              roughness={0.28}
+              metalness={0.8}
+              clearcoat={1}
+              clearcoatRoughness={0.15}
+              reflectivity={1}
+              envMapIntensity={1.2}
             />
           </Text3D>
         </Center>
       </group>
+
+      {/* soft contact shadow beneath the wordmark for grounding */}
+      <ContactShadows
+        position={[0, -1.1, 0]}
+        opacity={0.45}
+        scale={6}
+        blur={2.4}
+        far={2}
+        color="#050505"
+      />
     </Float>
   );
 }
@@ -83,10 +110,143 @@ function Logo3D() {
 function Lights() {
   return (
     <>
-      <ambientLight intensity={0.5} />
-      <pointLight position={[4, 4, 4]} intensity={40} color="#E8A33D" />
-      <pointLight position={[-4, -2, -3]} intensity={25} color="#7C6FFF" />
+      <ambientLight intensity={0.35} />
+      <pointLight position={[4, 4, 4]} intensity={35} color="#E8A33D" castShadow />
+      <pointLight position={[-4, -2, -3]} intensity={22} color="#7C6FFF" />
+      <spotLight
+        position={[0, 5, 3]}
+        angle={0.4}
+        penumbra={1}
+        intensity={18}
+        color="#ffffff"
+      />
+      {/* environment map drives the realistic reflections on the clearcoat material */}
+      <Environment preset="city" environmentIntensity={0.6} />
     </>
+  );
+}
+
+/* ---------------------------------------------------------
+   Ambient background: soft glowing color blobs. They drift on
+   their own slow loop, and translate opposite to the cursor —
+   as the 3D logo turns toward the pointer, these drift away
+   from it, giving the scene a layered, parallax depth cue.
+--------------------------------------------------------- */
+type OrbConfig = {
+  color: string;
+  size: number;
+  top: string;
+  left: string;
+  parallax: number;
+  drift: { x: number[]; y: number[] };
+  duration: number;
+};
+
+function Orb({
+  config,
+  springX,
+  springY,
+  reduceMotion,
+}: {
+  config: OrbConfig;
+  springX: ReturnType<typeof useSpring>;
+  springY: ReturnType<typeof useSpring>;
+  reduceMotion: boolean;
+}) {
+  const x = useTransform(springX, (v) => v * config.parallax);
+  const y = useTransform(springY, (v) => v * config.parallax);
+
+  return (
+    <motion.div
+      className="absolute rounded-full mix-blend-screen"
+      style={{
+        top: config.top,
+        left: config.left,
+        width: config.size,
+        height: config.size,
+        x: reduceMotion ? 0 : x,
+        y: reduceMotion ? 0 : y,
+      }}
+    >
+      <motion.div
+        className="h-full w-full rounded-full blur-[90px]"
+        style={{
+          background: `radial-gradient(circle at 35% 35%, ${config.color}55, ${config.color}00 70%)`,
+        }}
+        animate={
+          reduceMotion
+            ? undefined
+            : { x: config.drift.x, y: config.drift.y, opacity: [0.55, 0.85, 0.6, 0.55] }
+        }
+        transition={{
+          duration: config.duration,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+    </motion.div>
+  );
+}
+
+function AmbientOrbs() {
+  const prefersReducedMotion = useReducedMotion();
+  const reduceMotion = Boolean(prefersReducedMotion);
+
+  const mvX = useMotionValue(0);
+  const mvY = useMotionValue(0);
+  const springX = useSpring(mvX, { stiffness: 40, damping: 20, mass: 0.6 });
+  const springY = useSpring(mvY, { stiffness: 40, damping: 20, mass: 0.6 });
+
+  useEffect(() => {
+    if (reduceMotion) return;
+
+    const handlePointerMove = (e: PointerEvent) => {
+      const nx = (e.clientX / window.innerWidth) * 2 - 1;
+      const ny = (e.clientY / window.innerHeight) * 2 - 1;
+      mvX.set(nx);
+      mvY.set(ny);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    return () => window.removeEventListener("pointermove", handlePointerMove);
+  }, [reduceMotion, mvX, mvY]);
+
+  const orbs: OrbConfig[] = [
+    {
+      color: "#E8A33D",
+      size: 480,
+      top: "8%",
+      left: "58%",
+      parallax: -70,
+      drift: { x: [0, 24, -10, 0], y: [0, -18, 14, 0] },
+      duration: 22,
+    },
+    {
+      color: "#7C6FFF",
+      size: 420,
+      top: "48%",
+      left: "6%",
+      parallax: -50,
+      drift: { x: [0, -20, 16, 0], y: [0, 20, -12, 0] },
+      duration: 26,
+    },
+    {
+      color: "#E8A33D",
+      size: 260,
+      top: "70%",
+      left: "44%",
+      parallax: -35,
+      drift: { x: [0, 14, -18, 0], y: [0, -10, 16, 0] },
+      duration: 18,
+    },
+  ];
+
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+      {orbs.map((orb, i) => (
+        <Orb key={i} config={orb} springX={springX} springY={springY} reduceMotion={reduceMotion} />
+      ))}
+    </div>
   );
 }
 
@@ -95,7 +255,7 @@ function Lights() {
    readout, framed like a render-viewport UI a studio
    would actually use.
 --------------------------------------------------------- */
-function ViewportFrame({ children }: { children: React.ReactNode }) {
+function ViewportFrame({ children }: { children: ReactNode }) {
   const [coords, setCoords] = useState({ x: 0, y: 0 });
 
   return (
@@ -170,8 +330,10 @@ function KineticHeadline() {
 
 export default function Hero() {
   return (
-    <section className="relative mx-auto flex min-h-screen max-w-[1400px] flex-col justify-center gap-12 px-6 pt-24 lg:flex-row lg:items-center lg:gap-8 lg:px-12">
-      <div className="lg:w-[58%]">
+    <section className="relative mx-auto flex min-h-screen max-w-[1400px] flex-col justify-center gap-12 overflow-hidden px-6 pt-24 lg:flex-row lg:items-center lg:gap-8 lg:px-12">
+      <AmbientOrbs />
+
+      <div className="relative lg:w-[58%]">
         <motion.span
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -210,9 +372,14 @@ export default function Hero() {
         </motion.div>
       </div>
 
-      <div className="lg:w-[42%]">
+      <div className="relative lg:w-[42%]">
         <ViewportFrame>
-          <Canvas camera={{ position: [0, 0, 6], fov: 40 }} dpr={[1, 1.5]}>
+          <Canvas
+            camera={{ position: [0, 0, 6], fov: 40 }}
+            dpr={[1, 2]}
+            shadows
+            gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}
+          >
             <Lights />
             <Suspense fallback={null}>
               <Logo3D />
