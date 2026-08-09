@@ -1,0 +1,38 @@
+<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+  <rect width="800" height="600" fill="#14161A"/>
+  <circle cx="400" cy="300" r="220" fill="url(#glow)"/>
+
+  <!-- watch case -->
+  <circle cx="400" cy="300" r="150" fill="#1A1E24" stroke="#2B2F36" stroke-width="4"/>
+  <!-- crown -->
+  <rect x="548" y="285" width="30" height="30" rx="4" fill="#22262E" stroke="#2B2F36" stroke-width="2"/>
+
+  <!-- watch face -->
+  <circle cx="400" cy="300" r="128" fill="#0F1216" stroke="#E8A33D" stroke-width="2"/>
+
+  <!-- hour markers -->
+  <g stroke="#A7A79F" stroke-width="4">
+    <line x1="400" y1="182" x2="400" y2="200"/>
+    <line x1="400" y1="400" x2="400" y2="418"/>
+    <line x1="282" y1="300" x2="300" y2="300"/>
+    <line x1="500" y1="300" x2="518" y2="300"/>
+    <line x1="317" y1="217" x2="330" y2="230"/>
+    <line x1="470" y1="370" x2="483" y2="383"/>
+    <line x1="317" y1="383" x2="330" y2="370"/>
+    <line x1="470" y1="230" x2="483" y2="217"/>
+  </g>
+
+  <!-- hands -->
+  <line x1="400" y1="300" x2="400" y2="220" stroke="#ECEAE4" stroke-width="5" stroke-linecap="round"/>
+  <line x1="400" y1="300" x2="450" y2="320" stroke="#ECEAE4" stroke-width="5" stroke-linecap="round"/>
+  <line x1="400" y1="300" x2="440" y2="250" stroke="#7C6FFF" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="400" cy="300" r="7" fill="#E8A33D"/>
+
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#E8A33D" stop-opacity="0.18"/>
+      <stop offset="60%" stop-color="#7C6FFF" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#14161A" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+</svg>
