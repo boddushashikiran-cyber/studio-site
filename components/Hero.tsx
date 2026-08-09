@@ -251,23 +251,38 @@ function AmbientOrbs() {
 }
 
 /* ---------------------------------------------------------
-   Metallic ball: a real chrome sphere living in the same 3D
+   Metallic balls: real chrome spheres living in the same 3D
    scene as the wordmark, positioned slightly further from the
-   camera so the letters naturally occlude it as it passes
-   behind them. Bounces off the edges of the visible viewport
-   at its depth — i.e. the same square the frame shows — and
-   squashes/stretches on each wall hit before settling back
-   into a sphere, like a real ball absorbing an impact.
+   camera so the letters naturally occlude them as they pass
+   behind. Each bounces independently off the edges of the
+   visible viewport at its depth — the same square the frame
+   shows — and squashes/stretches on each wall hit before
+   settling back into a sphere, like a real ball absorbing
+   an impact.
 --------------------------------------------------------- */
-function MetallicBall() {
+type BallConfig = {
+  startX: number;
+  startY: number;
+  velX: number;
+  velY: number;
+  radius: number;
+  z: number;
+};
+
+const BALLS: BallConfig[] = [
+  { startX: -0.9, startY: 0.6, velX: 1.35, velY: 0.95, radius: 0.26, z: -1.05 },
+  { startX: 0.7, startY: -0.5, velX: -1.05, velY: 1.4, radius: 0.19, z: -1.35 },
+  { startX: 0.1, startY: 0.9, velX: 0.85, velY: -1.2, radius: 0.15, z: -0.75 },
+];
+
+function MetallicBall({ config }: { config: BallConfig }) {
   const meshRef = useRef<THREE.Mesh>(null!);
-  const posRef = useRef({ x: -0.9, y: 0.6 });
-  const velRef = useRef({ x: 1.35, y: 0.95 });
+  const posRef = useRef({ x: config.startX, y: config.startY });
+  const velRef = useRef({ x: config.velX, y: config.velY });
   const hitTimeRef = useRef(-10);
   const axisRef = useRef<"x" | "y">("x");
 
-  const ballZ = -1.05;
-  const radius = 0.34;
+  const { z: ballZ, radius } = config;
 
   useFrame((state, delta) => {
     const viewport = state.viewport.getCurrentViewport(state.camera, [0, 0, ballZ]);
@@ -328,7 +343,7 @@ function MetallicBall() {
   return (
     <mesh
       ref={meshRef}
-      position={[posRef.current.x, posRef.current.y, ballZ]}
+      position={[config.startX, config.startY, ballZ]}
       castShadow
       receiveShadow
     >
@@ -343,6 +358,16 @@ function MetallicBall() {
         envMapIntensity={1.6}
       />
     </mesh>
+  );
+}
+
+function MetallicBalls() {
+  return (
+    <>
+      {BALLS.map((config, i) => (
+        <MetallicBall key={i} config={config} />
+      ))}
+    </>
   );
 }
 
@@ -479,7 +504,7 @@ export default function Hero() {
             <Lights />
             <Suspense fallback={null}>
               <Logo3D />
-              <MetallicBall />
+              <MetallicBalls />
             </Suspense>
           </Canvas>
         </ViewportFrame>
