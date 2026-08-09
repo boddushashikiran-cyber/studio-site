@@ -7,7 +7,6 @@ import { Center, Text3D, Float, Environment, ContactShadows } from "@react-three
 import {
   motion,
   useMotionValue,
-  useMotionTemplate,
   useSpring,
   useTransform,
   useReducedMotion,
@@ -252,71 +251,98 @@ function AmbientOrbs() {
 }
 
 /* ---------------------------------------------------------
-   Metallic ball: bounces continuously inside the hero's
-   square viewport box. Off-center start position and a
-   non-round velocity ratio keep it from settling into a
-   simple back-and-forth — it drifts along each wall over
-   time, and each reflection sends it on to the next side.
+   Metallic ball: a real chrome sphere living in the same 3D
+   scene as the wordmark, positioned slightly further from the
+   camera so the letters naturally occlude it as it passes
+   behind them. Bounces off the edges of the visible viewport
+   at its depth — i.e. the same square the frame shows — and
+   squashes/stretches on each wall hit before settling back
+   into a sphere, like a real ball absorbing an impact.
 --------------------------------------------------------- */
-function MetallicBouncingBall() {
-  const prefersReducedMotion = useReducedMotion();
-  const reduceMotion = Boolean(prefersReducedMotion);
+function MetallicBall() {
+  const meshRef = useRef<THREE.Mesh>(null!);
+  const posRef = useRef({ x: -0.9, y: 0.6 });
+  const velRef = useRef({ x: 1.35, y: 0.95 });
+  const hitTimeRef = useRef(-10);
+  const axisRef = useRef<"x" | "y">("x");
 
-  const posX = useMotionValue(20); // percent of container
-  const posY = useMotionValue(28);
-  const left = useMotionTemplate`${posX}%`;
-  const top = useMotionTemplate`${posY}%`;
+  const ballZ = -1.05;
+  const radius = 0.34;
 
-  useEffect(() => {
-    if (reduceMotion) return;
+  useFrame((state, delta) => {
+    const viewport = state.viewport.getCurrentViewport(state.camera, [0, 0, ballZ]);
+    const halfW = viewport.width / 2 - radius;
+    const halfH = viewport.height / 2 - radius;
 
-    let vx = 0.5; // percent per frame
-    let vy = 0.36;
-    const radiusPct = 4.5; // keeps the ball's edge from clipping the box
-    let frame: number;
+    let { x, y } = posRef.current;
+    x += velRef.current.x * delta;
+    y += velRef.current.y * delta;
 
-    const tick = () => {
-      let x = posX.get() + vx;
-      let y = posY.get() + vy;
+    const t = state.clock.elapsedTime;
 
-      if (x <= radiusPct) {
-        x = radiusPct;
-        vx = Math.abs(vx);
-      } else if (x >= 100 - radiusPct) {
-        x = 100 - radiusPct;
-        vx = -Math.abs(vx);
+    if (x <= -halfW) {
+      x = -halfW;
+      velRef.current.x = Math.abs(velRef.current.x);
+      hitTimeRef.current = t;
+      axisRef.current = "x";
+    } else if (x >= halfW) {
+      x = halfW;
+      velRef.current.x = -Math.abs(velRef.current.x);
+      hitTimeRef.current = t;
+      axisRef.current = "x";
+    }
+
+    if (y <= -halfH) {
+      y = -halfH;
+      velRef.current.y = Math.abs(velRef.current.y);
+      hitTimeRef.current = t;
+      axisRef.current = "y";
+    } else if (y >= halfH) {
+      y = halfH;
+      velRef.current.y = -Math.abs(velRef.current.y);
+      hitTimeRef.current = t;
+      axisRef.current = "y";
+    }
+
+    posRef.current = { x, y };
+
+    if (meshRef.current) {
+      meshRef.current.position.set(x, y, ballZ);
+
+      // squash & stretch jiggle that decays after each wall hit
+      const elapsed = t - hitTimeRef.current;
+      const decay = Math.exp(-6 * elapsed);
+      const osc = Math.sin(elapsed * 34) * decay * 0.3;
+      if (axisRef.current === "x") {
+        meshRef.current.scale.set(1 - osc, 1 + osc, 1 + osc);
+      } else {
+        meshRef.current.scale.set(1 + osc, 1 - osc, 1 + osc);
       }
 
-      if (y <= radiusPct) {
-        y = radiusPct;
-        vy = Math.abs(vy);
-      } else if (y >= 100 - radiusPct) {
-        y = 100 - radiusPct;
-        vy = -Math.abs(vy);
-      }
-
-      posX.set(x);
-      posY.set(y);
-      frame = requestAnimationFrame(tick);
-    };
-
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [reduceMotion, posX, posY]);
+      // gentle constant spin so the chrome surface reads as real geometry
+      meshRef.current.rotation.x += delta * 0.6;
+      meshRef.current.rotation.y += delta * 0.8;
+    }
+  });
 
   return (
-    <motion.div
-      aria-hidden
-      className="pointer-events-none absolute z-[5] h-[30px] w-[30px] -translate-x-1/2 -translate-y-1/2 rounded-full"
-      style={{
-        left: reduceMotion ? "50%" : left,
-        top: reduceMotion ? "50%" : top,
-        background:
-          "radial-gradient(circle at 32% 26%, #ffffff 0%, #e4e4ea 16%, #a7a7b0 42%, #5c5c64 70%, #17171a 100%)",
-        boxShadow:
-          "0 0 14px rgba(255,255,255,0.3), inset -5px -5px 9px rgba(0,0,0,0.55), inset 3px 3px 6px rgba(255,255,255,0.55)",
-      }}
-    />
+    <mesh
+      ref={meshRef}
+      position={[posRef.current.x, posRef.current.y, ballZ]}
+      castShadow
+      receiveShadow
+    >
+      <sphereGeometry args={[radius, 64, 64]} />
+      <meshPhysicalMaterial
+        color="#cfd0d6"
+        metalness={1}
+        roughness={0.12}
+        clearcoat={1}
+        clearcoatRoughness={0.08}
+        reflectivity={1}
+        envMapIntensity={1.6}
+      />
+    </mesh>
   );
 }
 
@@ -453,9 +479,9 @@ export default function Hero() {
             <Lights />
             <Suspense fallback={null}>
               <Logo3D />
+              <MetallicBall />
             </Suspense>
           </Canvas>
-          <MetallicBouncingBall />
         </ViewportFrame>
       </div>
     </section>
