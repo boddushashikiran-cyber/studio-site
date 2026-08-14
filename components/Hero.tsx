@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useRef, useEffect, useLayoutEffect, useState } from "react";
 import type { MutableRefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
@@ -255,7 +255,7 @@ function SceneRig({
 }: {
   titleMaterial: THREE.ShaderMaterial;
   dustMaterial: THREE.ShaderMaterial;
-  motionRef: React.MutableRefObject<HeroMotionState>;
+  motionRef: MutableRefObject<HeroMotionState>;
 }) {
   const { camera } = useThree();
 
@@ -319,29 +319,41 @@ export default function Hero() {
   const particleCount = isDesktop ? PARTICLE_COUNT_DESKTOP : PARTICLE_COUNT_MOBILE;
   const dustCount = isDesktop ? DUST_COUNT_DESKTOP : DUST_COUNT_MOBILE;
 
-  const { titleField, dustField } = useMemo(() => {
-    if (reducedMotion) return { titleField: null, dustField: null };
-    return {
-      titleField: createTitleField(particleCount),
-      dustField: createDustField(dustCount),
-    };
-  }, [reducedMotion, particleCount, dustCount]);
+  // IMPORTANT: titleField/dustField must never be created during render.
+  // They previously came from a render-phase useMemo, which also runs on
+  // the server during SSR (reducedMotion starts out as `null`, and
+  // `!null` is true, so the old check let this run server-side on every
+  // request). Building THREE.BufferGeometry/ShaderMaterial objects on the
+  // server has no benefit and is a common source of production-only
+  // crashes in Next.js + react-three-fiber apps. Creating them here in
+  // state — only ever assigned from inside useEffect below — guarantees
+  // this code runs exclusively in the browser.
+  const [titleField, setTitleField] = useState<ReturnType<
+    typeof createTitleField
+  > | null>(null);
+  const [dustField, setDustField] = useState<ReturnType<
+    typeof createDustField
+  > | null>(null);
 
-  // The cinematic timeline itself — only runs when motion is allowed and
-  // the particle field actually exists.
+  // The cinematic timeline itself — only runs when motion is allowed.
+  // This whole effect (and everything it calls) only ever executes on
+  // the client, which is what makes it safe to touch THREE.js here.
   useEffect(() => {
-    if (reducedMotion || !titleField) return;
+    if (reducedMotion) return;
 
-    titleField.material.uniforms.uPixelRatio.value = Math.min(
+    const newTitleField = createTitleField(particleCount);
+    const newDustField = createDustField(dustCount);
+    setTitleField(newTitleField);
+    setDustField(newDustField);
+
+    newTitleField.material.uniforms.uPixelRatio.value = Math.min(
       window.devicePixelRatio || 1,
       2
     );
-    if (dustField) {
-      dustField.material.uniforms.uPixelRatio.value = Math.min(
-        window.devicePixelRatio || 1,
-        2
-      );
-    }
+    newDustField.material.uniforms.uPixelRatio.value = Math.min(
+      window.devicePixelRatio || 1,
+      2
+    );
 
     let cancelled = false;
 
@@ -360,7 +372,7 @@ export default function Hero() {
         isDesktop ? 460 : 340,
         isDesktop ? 300 : 190
       );
-      const targetAttr = titleField.geometry.getAttribute(
+      const targetAttr = newTitleField.geometry.getAttribute(
         "aTarget"
       ) as THREE.BufferAttribute;
       targetAttr.array.set(sampled);
@@ -437,9 +449,13 @@ export default function Hero() {
 
     return () => {
       cancelled = true;
+      newTitleField.geometry.dispose();
+      newTitleField.material.dispose();
+      newDustField.geometry.dispose();
+      newDustField.material.dispose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reducedMotion, titleField, dustField, particleCount, isDesktop]);
+  }, [reducedMotion, particleCount, dustCount, isDesktop]);
 
   useEffect(() => {
     settledRef.current = settled;
