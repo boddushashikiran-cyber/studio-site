@@ -7,8 +7,8 @@ const testimonials = [
   {
     quote:
       "Kiran Studios rebuilt our product site in three weeks and it finally feels like the product itself.",
-    name: "R. Okafor",
-    role: "Founder, Meridian Analytics",
+    name: "Daruvu Yellanna",
+    role: "Advisory Board Member, Tourism and Culture",
   },
   {
     quote:
