@@ -338,8 +338,19 @@ export default function Hero() {
   // The cinematic timeline itself — only runs when motion is allowed.
   // This whole effect (and everything it calls) only ever executes on
   // the client, which is what makes it safe to touch THREE.js here.
+  //
+  // CRITICAL: reducedMotion starts as `null` (unknown) and the component
+  // renders a bare placeholder <section> with none of the animated refs
+  // attached while it's null. `if (reducedMotion) return` treated null
+  // as falsy and let this effect run anyway on that very first pass —
+  // at which point kiranRef/taglineRef/ctaRef/scrollHintRef.current were
+  // all still null, so gsap.to(null, ...) threw
+  // "Cannot read properties of null (reading '_gsap')" and crashed the
+  // page. Checking `!== false` ensures we only ever proceed once
+  // reducedMotion has been explicitly resolved to false, i.e. once the
+  // full JSX (with every ref attached) has actually rendered.
   useEffect(() => {
-    if (reducedMotion) return;
+    if (reducedMotion !== false) return;
 
     const newTitleField = createTitleField(particleCount);
     const newDustField = createDustField(dustCount);
@@ -410,12 +421,12 @@ export default function Hero() {
 
       // Impact: particles dissolve as the crisp chrome typography takes over.
       tl.to(m, { dissolve: 1, duration: 0.7, ease: "power1.in" }, 3.5);
-      tl.to(
-        kiranRef.current,
-        { opacity: 1, duration: 0.5, ease: "power2.out" },
-        3.55
-      );
       if (kiranRef.current) {
+        tl.to(
+          kiranRef.current,
+          { opacity: 1, duration: 0.5, ease: "power2.out" },
+          3.55
+        );
         tl.fromTo(
           kiranRef.current,
           { backgroundPosition: "100% 0%" },
@@ -439,10 +450,26 @@ export default function Hero() {
       );
 
       // Calm: tagline, CTA, scroll hint settle in — the hero becomes a
-      // normal, interactive section from here on.
-      tl.to(taglineRef.current, { opacity: 1, y: 0, duration: 0.6 }, 4.9)
-        .to(ctaRef.current, { opacity: 1, y: 0, duration: 0.6 }, 5.05)
-        .to(scrollHintRef.current, { opacity: 1, duration: 0.6 }, 5.3)
+      // normal, interactive section from here on. Filtering out any null
+      // ref (same pattern as the STUDIOS letters above) means gsap is
+      // never handed a null target, which is what previously threw
+      // "Cannot read properties of null (reading '_gsap')" and crashed
+      // the page.
+      tl.to(
+        [taglineRef.current].filter(Boolean),
+        { opacity: 1, y: 0, duration: 0.6 },
+        4.9
+      )
+        .to(
+          [ctaRef.current].filter(Boolean),
+          { opacity: 1, y: 0, duration: 0.6 },
+          5.05
+        )
+        .to(
+          [scrollHintRef.current].filter(Boolean),
+          { opacity: 1, duration: 0.6 },
+          5.3
+        )
         .to(m, { cameraZ: 6.5, duration: 1.2, ease: "power1.out" }, 4.6)
         .call(() => setSettled(true), [], 5.6);
     }
@@ -462,8 +489,10 @@ export default function Hero() {
   }, [settled]);
 
   // Post-intro: subtle pointer parallax + scroll-linked continuation.
+  // Same null-vs-false fix as above: don't run while reducedMotion is
+  // still unresolved.
   useEffect(() => {
-    if (reducedMotion) return;
+    if (reducedMotion !== false) return;
 
     function handlePointerMove(e: PointerEvent) {
       if (!settledRef.current) return;
