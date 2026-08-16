@@ -1,5 +1,9 @@
 -- Run this in the Supabase SQL editor (or via `supabase db push`)
 -- to set up the tables the studio site needs.
+--
+-- Safe to re-run in full at any time (e.g. after pulling schema
+-- updates) — every statement either uses IF NOT EXISTS or drops
+-- the existing trigger/policy/publication entry before recreating it.
 
 create extension if not exists "pgcrypto";
 
@@ -84,6 +88,7 @@ begin
 end;
 $$ language plpgsql security definer;
 
+drop trigger if exists bookings_lock_slot on bookings;
 create trigger bookings_lock_slot
   after insert on bookings
   for each row execute function sync_slot_lock();
@@ -100,21 +105,25 @@ alter table inquiries enable row level security;
 alter table projects enable row level security;
 alter table slot_locks enable row level security;
 
+drop policy if exists "Anyone can submit a booking" on bookings;
 create policy "Anyone can submit a booking"
   on bookings for insert
   to anon
   with check (true);
 
+drop policy if exists "Anyone can read slot availability" on slot_locks;
 create policy "Anyone can read slot availability"
   on slot_locks for select
   to anon
   using (true);
 
+drop policy if exists "Anyone can submit an inquiry" on inquiries;
 create policy "Anyone can submit an inquiry"
   on inquiries for insert
   to anon
   with check (true);
 
+drop policy if exists "Anyone can read published projects" on projects;
 create policy "Anyone can read published projects"
   on projects for select
   to anon
@@ -124,4 +133,5 @@ create policy "Anyone can read published projects"
 -- Realtime: broadcast slot_locks changes so the booking page can
 -- show "this slot was just taken" live, without exposing PII.
 -- ---------------------------------------------------------------
+alter publication supabase_realtime drop table if exists slot_locks;
 alter publication supabase_realtime add table slot_locks;
