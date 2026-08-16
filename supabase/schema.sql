@@ -133,5 +133,12 @@ create policy "Anyone can read published projects"
 -- Realtime: broadcast slot_locks changes so the booking page can
 -- show "this slot was just taken" live, without exposing PII.
 -- ---------------------------------------------------------------
-alter publication supabase_realtime drop table if exists slot_locks;
-alter publication supabase_realtime add table slot_locks;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'slot_locks'
+  ) then
+    alter publication supabase_realtime add table slot_locks;
+  end if;
+end $$;
